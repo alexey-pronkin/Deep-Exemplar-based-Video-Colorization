@@ -41,6 +41,9 @@ def colorize_video(opt, input_path, reference_file, output_path, nonlocal_net, c
     filenames.sort(key=lambda f: int("".join(filter(str.isdigit, f) or -1)))
 
     # NOTE: resize frames to 216*384
+    if type(opt.image_size) is str:
+        opt.image_size = eval(opt.image_size)
+
     transform = transforms.Compose(
         [CenterPad(opt.image_size), transform_lib.CenterCrop(opt.image_size), RGB2Lab(), ToTensor(), Normalize()]
     )
@@ -130,7 +133,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--frame_propagate", default=False, type=bool, help="propagation mode, , please check the paper"
     )
-    parser.add_argument("--image_size", type=int, default=[216 * 2, 384 * 2], help="the image size, eg. [216,384]")
+    parser.add_argument("--image_size", type=str, default=[216 * 2, 384 * 2], help="the image size, eg. [216,384]")
     parser.add_argument("--cuda", action="store_false")
     parser.add_argument("--gpu_ids", type=str, default="0", help="separate by comma")
     parser.add_argument("--clip_path", type=str, default="./sample_videos/clips/v32", help="path of input clips")
@@ -139,9 +142,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--make_video", default=False, type=bool, help="create avi video from frames"
     )
-    parser.add_argument(
-        "--quality", default=0.8, type=float, help="quality of compression for jpg"
-    )
+    parser.add_argument("--quality", default=0.8, type=float, help="quality of compression for jpg")
     parser.add_argument("--image_format", type=str, default="png", help="output image format: png or jpg")
     opt = parser.parse_args()
     opt.gpu_ids = [int(x) for x in opt.gpu_ids.split(",")]
