@@ -117,7 +117,7 @@ def colorize_video(opt, input_path, reference_file, output_path, nonlocal_net, c
             IA_predict_rgb = batch_lab2rgb_transpose_mc(curr_bs_l[:32], curr_predict[:32, ...])
 
         # save the frames
-        save_frames(IA_predict_rgb, output_path, index)
+        save_frames(image=IA_predict_rgb, image_folder=output_path,  opt=opt, index=index)
 
     # output video
     video_name = "video.avi"
@@ -135,6 +135,13 @@ if __name__ == "__main__":
     parser.add_argument("--clip_path", type=str, default="./sample_videos/clips/v32", help="path of input clips")
     parser.add_argument("--ref_path", type=str, default="./sample_videos/ref/v32", help="path of refernce images")
     parser.add_argument("--output_path", type=str, default="./sample_videos/output", help="path of output clips")
+    parser.add_argument(
+        "--make_video", default=False, type=bool, help="create avi video from frames"
+    )
+    parser.add_argument(
+        "--quality", default=0.8, type=float, help="quality of compression for jpg"
+    )
+    parser.add_argument("--image_format", type=str, default="png", help="output image format: png or jpg")
     opt = parser.parse_args()
     opt.gpu_ids = [int(x) for x in opt.gpu_ids.split(",")]
     cudnn.benchmark = True
@@ -180,7 +187,8 @@ if __name__ == "__main__":
             print("error when colorizing the video " + ref_name)
             print(error)
 
-    video_name = "video.avi"
-    clip_output_path = os.path.join(opt.output_path, clip_name)
-    mkdir_if_not(clip_output_path)
-    folder2vid(image_folder=opt.clip_path, output_dir=clip_output_path, filename=video_name)
+    if opt.gpu_ids.make_video:
+        video_name = "video.avi"
+        clip_output_path = os.path.join(opt.output_path, clip_name)
+        mkdir_if_not(clip_output_path)
+        folder2vid(image_folder=opt.clip_path, output_dir=clip_output_path, filename=video_name)

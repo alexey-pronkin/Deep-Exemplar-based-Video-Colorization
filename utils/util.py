@@ -243,13 +243,16 @@ def colorfulness(input_ab):
 
 
 ###### video related #######
-def save_frames(image, image_folder, index=None, image_name=None):
+def save_frames(image, image_folder, opt, index=None, image_name=None):
     if image is not None:
         image = np.clip(image, 0, 255).astype(np.uint8)
         if image_name:
             io.imsave(os.path.join(image_folder, image_name), image)
         else:
-            io.imsave(os.path.join(image_folder, str(index).zfill(5) + ".jpg"), image)
+            if any([flag in opt.image_format for flag in ["jpeg", "jpg"]]):
+                io.imsave(os.path.join(image_folder, str(index).zfill(5) + ".jpg"), image, quality=opt.quaity)
+            elif "png" in opt.image_format.lower():
+                io.imsave(os.path.join(image_folder, str(index).zfill(5) + ".png"), image)
 
 
 def folder2vid(image_folder, output_dir, filename):
