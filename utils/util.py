@@ -250,7 +250,9 @@ def save_frames(image, image_folder, opt, index=None, image_name=None):
             io.imsave(os.path.join(image_folder, image_name), image)
         else:
             if any([flag in opt.image_format for flag in ["jpeg", "jpg"]]):
-                io.imsave(os.path.join(image_folder, str(index).zfill(5) + ".jpg"), image, quality=opt.quaity)
+                # TODO: add quality parameter, now not working
+                # io.imsave(os.path.join(image_folder, str(index).zfill(5) + ".jpeg"), image, plugin='PIL', quality=int(opt.quaity*100))
+                io.imsave(os.path.join(image_folder, str(index).zfill(5) + ".jpg"), image)
             elif "png" in opt.image_format.lower():
                 io.imsave(os.path.join(image_folder, str(index).zfill(5) + ".png"), image)
 

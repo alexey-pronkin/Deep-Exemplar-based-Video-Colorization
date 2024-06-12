@@ -123,7 +123,7 @@ def colorize_video(opt, input_path, reference_file, output_path, nonlocal_net, c
         save_frames(image=IA_predict_rgb, image_folder=output_path,  opt=opt, index=index)
 
     # output video
-    if opt.gpu_ids.make_video:
+    if opt.make_video:
         video_name = "video.avi"
         folder2vid(image_folder=output_path, output_dir=output_path, filename=video_name)
     print()
@@ -189,7 +189,7 @@ if __name__ == "__main__":
             print("error when colorizing the video " + ref_name)
             print(error)
 
-    if opt.gpu_ids.make_video:
+    if opt.make_video:
         video_name = "video.avi"
         clip_output_path = os.path.join(opt.output_path, clip_name)
         mkdir_if_not(clip_output_path)
