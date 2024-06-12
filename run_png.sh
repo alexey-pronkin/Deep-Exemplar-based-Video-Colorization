@@ -7,5 +7,5 @@ python test.py --clip_path ./sample_videos7/clips/$n \
                --output_path ./sample_videos7/output \
                --image_size [768,1024] \
                --image_format png \
-               --make_video false
+               --make_video
 done
