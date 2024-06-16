@@ -15,4 +15,4 @@ PyYAML
 tensorboard
 future
 numba
-pypng
+opencv-python

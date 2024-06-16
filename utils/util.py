@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torchvision.utils as vutils
-from skimage import color, io
+from skimage import color
 from torch.autograd import Variable
 
 cv2.setNumThreads(0)
@@ -101,17 +101,18 @@ def gray2rgb_batch(l):
     return torch.cat((l_uncenter, l_uncenter, l_uncenter), dim=1)
 
 
-def lab2rgb_transpose(img_l, img_ab):
+def lab2rgb_transpose(img_l, img_ab, bits="uint16"):
     """INPUTS
         img_l      1xXxX     [0,100]
         img_ab     2xXxX     [-100,100]
     OUTPUTS
         returned value is XxXx3"""
     pred_lab = np.concatenate((img_l, img_ab), axis=0).transpose((1, 2, 0))
-    return (np.clip(color.lab2rgb(pred_lab), 0, 1) * 255).astype("uint8")
+
+    return (np.clip(color.lab2rgb(pred_lab), 0, 1) * b2n.get(bits)).astype(bits)
 
 
-def lab2rgb_transpose_mc(img_l_mc, img_ab_mc):
+def lab2rgb_transpose_mc(img_l_mc, img_ab_mc, bits="uint16"):
     if isinstance(img_l_mc, Variable):
         img_l_mc = img_l_mc.data.cpu()
     if isinstance(img_ab_mc, Variable):
@@ -128,10 +129,14 @@ def lab2rgb_transpose_mc(img_l_mc, img_ab_mc):
     img_ab = img_ab_mc * ab_norm + ab_mean
     pred_lab = torch.cat((img_l, img_ab), dim=0)
     grid_lab = pred_lab.numpy().astype("float64")
-    return (np.clip(color.lab2rgb(grid_lab.transpose((1, 2, 0))), 0, 1) * 255).astype("uint8")
+    return (np.clip(color.lab2rgb(grid_lab.transpose((1, 2, 0))), 0, 1) * b2n.get(bits)).astype(bits)
 
+b2n = {
+    "uint16": 2**16-1,
+    "uint8": 2**8-1
+    }
 
-def batch_lab2rgb_transpose_mc(img_l_mc, img_ab_mc, nrow=8):
+def batch_lab2rgb_transpose_mc(img_l_mc, img_ab_mc, nrow=8, bits="uint16"):
     if isinstance(img_l_mc, Variable):
         img_l_mc = img_l_mc.data.cpu()
     if isinstance(img_ab_mc, Variable):
@@ -148,7 +153,7 @@ def batch_lab2rgb_transpose_mc(img_l_mc, img_ab_mc, nrow=8):
     img_ab = img_ab_mc * ab_norm + ab_mean
     pred_lab = torch.cat((img_l, img_ab), dim=1)
     grid_lab = vutils.make_grid(pred_lab, nrow=nrow).numpy().astype("float64")
-    return (np.clip(color.lab2rgb(grid_lab.transpose((1, 2, 0))), 0, 1) * 255).astype("uint8")
+    return (np.clip(color.lab2rgb(grid_lab.transpose((1, 2, 0))), 0, 1) * b2n.get(bits)).astype(bits)
 
 
 ###### loss functions ######
@@ -243,18 +248,16 @@ def colorfulness(input_ab):
 
 
 ###### video related #######
-def save_frames(image, image_folder, opt, index=None, image_name=None):
+def save_frames(image, image_folder, opt, index=None, image_name=None, bits="uint16"):
     if image is not None:
-        image = np.clip(image, 0, 255).astype(np.uint8)
+        image = np.clip(image, 0, b2n.get(bits)).astype(bits)
         if image_name:
-            io.imsave(os.path.join(image_folder, image_name), image)
+            cv2.imsave(os.path.join(image_folder, image_name), image)
         else:
             if any([flag in opt.image_format for flag in ["jpeg", "jpg"]]):
-                # TODO: add quality parameter, now not working
-                # io.imsave(os.path.join(image_folder, str(index).zfill(5) + ".jpeg"), image, plugin='PIL', quality=int(opt.quaity*100))
-                io.imsave(os.path.join(image_folder, str(index).zfill(5) + ".jpg"), image)
+                cv2.imsave(os.path.join(image_folder, str(index).zfill(5) + ".jpg"), image, [cv2.IMWRITE_JPEG_QUALITY, int(opt.quaity*100)])
             elif "png" in opt.image_format.lower():
-                io.imsave(os.path.join(image_folder, str(index).zfill(5) + ".png"), image)
+                cv2.imsave(os.path.join(image_folder, str(index).zfill(5) + ".png"), image)
 
 
 def folder2vid(image_folder, output_dir, filename):

@@ -115,9 +115,9 @@ def colorize_video(opt, input_path, reference_file, output_path, nonlocal_net, c
             curr_predict_a = torch.from_numpy(curr_predict_a).unsqueeze(0).unsqueeze(0)
             curr_predict_b = torch.from_numpy(curr_predict_b).unsqueeze(0).unsqueeze(0)
             curr_predict_filter = torch.cat((curr_predict_a, curr_predict_b), dim=1)
-            IA_predict_rgb = batch_lab2rgb_transpose_mc(curr_bs_l[:32], curr_predict_filter[:32, ...])
+            IA_predict_rgb = batch_lab2rgb_transpose_mc(curr_bs_l[:32], curr_predict_filter[:32, ...], bits=opt.png_bits)
         else:
-            IA_predict_rgb = batch_lab2rgb_transpose_mc(curr_bs_l[:32], curr_predict[:32, ...])
+            IA_predict_rgb = batch_lab2rgb_transpose_mc(curr_bs_l[:32], curr_predict[:32, ...], bits=opt.png_bits)
 
         # save the frames
         save_frames(image=IA_predict_rgb, image_folder=output_path,  opt=opt, index=index)
@@ -126,13 +126,14 @@ def colorize_video(opt, input_path, reference_file, output_path, nonlocal_net, c
     if opt.make_video:
         video_name = "video.avi"
         folder2vid(image_folder=output_path, output_dir=output_path, filename=video_name)
-    print()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--frame_propagate", default=False, type=bool, help="propagation mode, , please check the paper"
     )
+    parser.add_argument("--png_bits", type=str, default="uint8", help="uint8, uint16 - png 8/16 bits")
+    
     parser.add_argument("--image_size", type=str, default=[216 * 2, 384 * 2], help="the image size, eg. [216,384]")
     parser.add_argument("--cuda", action="store_false")
     parser.add_argument("--gpu_ids", type=str, default="0", help="separate by comma")
