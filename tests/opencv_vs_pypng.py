@@ -47,6 +47,7 @@ def png_read(filename:str, bits:int=16) -> np.array:
 #         t.print_exc()
 if __name__ == "__main__":
     import timeit
+    import os
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--frame_propagate", default=False, type=bool, help="propagation mode, , please check the paper"
@@ -64,5 +65,7 @@ if __name__ == "__main__":
 
     print("pypng save time: ", timeit.Timer(pypng).timeit(number=1))
     print("opencv save time: ", timeit.Timer(opencv).timeit(number=1))
+    os.remove("pypng_img.png")
+    os.remove("opencv_img.png")
 
     
