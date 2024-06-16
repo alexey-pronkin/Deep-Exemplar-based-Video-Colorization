@@ -53,14 +53,14 @@ if __name__ == "__main__":
     )
     parser.add_argument("--png_bits", type=str, default="uint8", help="uint8, uint16 - png 8/16")
     
-    parser.add_argument("--image_size", type=str, default=[216 * 2, 384 * 2], help="the image size, eg. [216,384]")
+    parser.add_argument("--image_size", type=str, default="[216, 384]", help="the image size, eg. [216,384]")
     opt = parser.parse_args()
     def pypng():
         png_save(filename="pypng_img.png", arr=image.astype(opt.png_bits))
     def opencv():
-        cv2.imwrite("pypng_img.png", image.astype(opt.png_bits))
+        cv2.imwrite("opencv_img.png", image.astype(opt.png_bits))
     img_size = eval(opt.image_size)
-    image = np.random.randint(low=0, high= 2**16-1, size=(2048, 2048, 3), dtype="uint16")
+    image = np.random.randint(low=0, high= 2**16-1, size=(img_size[0], img_size[1], 3), dtype="uint16")
 
     print("pypng save time: ", timeit.Timer(pypng).timeit(number=1))
     print("opencv save time: ", timeit.Timer(opencv).timeit(number=1))
