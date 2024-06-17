@@ -81,6 +81,10 @@ def center_lab_img(img_lab):
 def rgb2lab_transpose(img_rgb):
     return color.rgb2lab(img_rgb).transpose((2, 0, 1))
 
+b2n = {
+    "uint16": 2**16-1,
+    "uint8": 2**8-1
+    }
 
 def lab2rgb(img_l, img_ab):
     """INPUTS
@@ -128,13 +132,10 @@ def lab2rgb_transpose_mc(img_l_mc, img_ab_mc, bits="uint16"):
     img_l = img_l_mc * l_norm + l_mean
     img_ab = img_ab_mc * ab_norm + ab_mean
     pred_lab = torch.cat((img_l, img_ab), dim=0)
-    grid_lab = pred_lab.numpy().astype("float64")
+    grid_lab = pred_lab.numpy().astype("float128")
     return (np.clip(color.lab2rgb(grid_lab.transpose((1, 2, 0))), 0, 1) * b2n.get(bits)).astype(bits)
 
-b2n = {
-    "uint16": 2**16-1,
-    "uint8": 2**8-1
-    }
+
 
 def batch_lab2rgb_transpose_mc(img_l_mc, img_ab_mc, nrow=8, bits="uint16"):
     if isinstance(img_l_mc, Variable):
@@ -152,7 +153,7 @@ def batch_lab2rgb_transpose_mc(img_l_mc, img_ab_mc, nrow=8, bits="uint16"):
     img_l = img_l_mc * l_norm + l_mean
     img_ab = img_ab_mc * ab_norm + ab_mean
     pred_lab = torch.cat((img_l, img_ab), dim=1)
-    grid_lab = vutils.make_grid(pred_lab, nrow=nrow).numpy().astype("float64")
+    grid_lab = vutils.make_grid(pred_lab, nrow=nrow).numpy().astype("float128")
     return (np.clip(color.lab2rgb(grid_lab.transpose((1, 2, 0))), 0, 1) * b2n.get(bits)).astype(bits)
 
 
@@ -251,6 +252,7 @@ def colorfulness(input_ab):
 def save_frames(image, image_folder, opt, index=None, image_name=None, bits="uint16"):
     if image is not None:
         image = np.clip(image, 0, b2n.get(bits)).astype(bits)
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         if image_name:
             cv2.imwrite(os.path.join(image_folder, image_name), image)
         else:
