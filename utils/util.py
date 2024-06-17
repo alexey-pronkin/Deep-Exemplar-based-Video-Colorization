@@ -257,7 +257,7 @@ def save_frames(image, image_folder, opt, index=None, image_name=None, bits="uin
             cv2.imwrite(os.path.join(image_folder, image_name), image)
         else:
             if any([flag in opt.image_format for flag in ["jpeg", "jpg"]]):
-                cv2.imwrite(os.path.join(image_folder, str(index).zfill(5) + ".jpg"), image, [cv2.IMWRITE_JPEG_QUALITY, int(opt.quaity*100)])
+                cv2.imwrite(os.path.join(image_folder, str(index).zfill(5) + ".jpg"), image, [cv2.IMWRITE_JPEG_QUALITY, int(opt.quality*100)])
             elif "png" in opt.image_format.lower():
                 cv2.imwrite(os.path.join(image_folder, str(index).zfill(5) + ".png"), image)
 
