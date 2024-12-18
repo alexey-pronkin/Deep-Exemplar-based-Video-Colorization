@@ -8,25 +8,30 @@ import time
 import cv2
 import numpy as np
 import torch
-import torch.backends.cudnn as cudnn
+
 import torchvision.transforms as transform_lib
 from PIL import Image
 from tqdm import tqdm
 
 import lib.TestTransforms as transforms
+import lib.device as device_script
 from models.ColorVidNet import ColorVidNet
 from models.FrameColor import frame_colorization
 from models.NonlocalNet import VGG19_pytorch, WarpNet
-from utils.util import (batch_lab2rgb_transpose_mc, folder2vid, mkdir_if_not,
-                        save_frames, tensor_lab2rgb, uncenter_l)
+from utils.util import (
+    batch_lab2rgb_transpose_mc,
+    folder2vid,
+    mkdir_if_not,
+    save_frames,
+    tensor_lab2rgb,
+    uncenter_l,
+)
 from utils.util_distortion import CenterPad, Normalize, RGB2Lab, ToTensor
 
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-torch.cuda.set_device(0)
 
-
-def colorize_video(opt, input_path, reference_file, output_path, nonlocal_net, colornet, vggnet):
+def colorize_video(
+    opt, input_path, reference_file, output_path, nonlocal_net, colornet, vggnet
+):
     # parameters for wls filter
     wls_filter_on = True
     lambda_value = 500
@@ -45,7 +50,13 @@ def colorize_video(opt, input_path, reference_file, output_path, nonlocal_net, c
         opt.image_size = eval(opt.image_size)
 
     transform = transforms.Compose(
-        [CenterPad(opt.image_size), transform_lib.CenterCrop(opt.image_size), RGB2Lab(), ToTensor(), Normalize()]
+        [
+            CenterPad(opt.image_size),
+            transform_lib.CenterCrop(opt.image_size),
+            RGB2Lab(),
+            ToTensor(),
+            Normalize(),
+        ]
     )
 
     # if frame propagation: use the first frame as reference
@@ -57,35 +68,47 @@ def colorize_video(opt, input_path, reference_file, output_path, nonlocal_net, c
     total_time = 0
     I_last_lab_predict = None
 
-    IB_lab_large = transform(frame_ref).unsqueeze(0).cuda()
-    IB_lab = torch.nn.functional.interpolate(IB_lab_large, scale_factor=0.5, mode="bilinear")
+    IB_lab_large = transform(frame_ref).unsqueeze(0).to(device)
+    IB_lab = torch.nn.functional.interpolate(
+        IB_lab_large, scale_factor=0.5, mode="bilinear"
+    )
     IB_l = IB_lab[:, 0:1, :, :]
     IB_ab = IB_lab[:, 1:3, :, :]
     with torch.no_grad():
-      I_reference_lab = IB_lab
-      I_reference_l = I_reference_lab[:, 0:1, :, :]
-      I_reference_ab = I_reference_lab[:, 1:3, :, :]
-      I_reference_rgb = tensor_lab2rgb(torch.cat((uncenter_l(I_reference_l), I_reference_ab), dim=1))
-      features_B = vggnet(I_reference_rgb, ["r12", "r22", "r32", "r42", "r52"], preprocess=True)
+        I_reference_lab = IB_lab
+        I_reference_l = I_reference_lab[:, 0:1, :, :]
+        I_reference_ab = I_reference_lab[:, 1:3, :, :]
+        I_reference_rgb = tensor_lab2rgb(
+            torch.cat((uncenter_l(I_reference_l), I_reference_ab), dim=1)
+        )
+        features_B = vggnet(
+            I_reference_rgb, ["r12", "r22", "r32", "r42", "r52"], preprocess=True
+        )
 
     for index, frame_name in enumerate(tqdm(filenames)):
         frame1 = Image.open(os.path.join(input_path, frame_name))
-        IA_lab_large = transform(frame1).unsqueeze(0).cuda()
-        IA_lab = torch.nn.functional.interpolate(IA_lab_large, scale_factor=0.5, mode="bilinear")
+        IA_lab_large = transform(frame1).unsqueeze(0).to(device)
+        IA_lab = torch.nn.functional.interpolate(
+            IA_lab_large, scale_factor=0.5, mode="bilinear"
+        )
 
         IA_l = IA_lab[:, 0:1, :, :]
         IA_ab = IA_lab[:, 1:3, :, :]
-        
+
         if I_last_lab_predict is None:
             if opt.frame_propagate:
                 I_last_lab_predict = IB_lab
             else:
-                I_last_lab_predict = torch.zeros_like(IA_lab).cuda()
+                I_last_lab_predict = torch.zeros_like(IA_lab).to(device)
 
         # start the frame colorization
         with torch.no_grad():
             I_current_lab = IA_lab
-            I_current_ab_predict, I_current_nonlocal_lab_predict, features_current_gray = frame_colorization(
+            (
+                I_current_ab_predict,
+                I_current_nonlocal_lab_predict,
+                features_current_gray,
+            ) = frame_colorization(
                 I_current_lab,
                 I_reference_lab,
                 I_last_lab_predict,
@@ -101,54 +124,119 @@ def colorize_video(opt, input_path, reference_file, output_path, nonlocal_net, c
         # upsampling
         curr_bs_l = IA_lab_large[:, 0:1, :, :]
         curr_predict = (
-            torch.nn.functional.interpolate(I_current_ab_predict.data.cpu(), scale_factor=2, mode="bilinear") * 1.25
+            torch.nn.functional.interpolate(
+                I_current_ab_predict.data.cpu(), scale_factor=2, mode="bilinear"
+            )
+            * 1.25
         )
 
         # filtering
         if wls_filter_on:
             guide_image = uncenter_l(curr_bs_l) * 255 / 100
             wls_filter = cv2.ximgproc.createFastGlobalSmootherFilter(
-                guide_image[0, 0, :, :].cpu().numpy().astype(np.uint8), lambda_value, sigma_color
+                guide_image[0, 0, :, :].cpu().numpy().astype(np.uint8),
+                lambda_value,
+                sigma_color,
             )
             curr_predict_a = wls_filter.filter(curr_predict[0, 0, :, :].cpu().numpy())
             curr_predict_b = wls_filter.filter(curr_predict[0, 1, :, :].cpu().numpy())
             curr_predict_a = torch.from_numpy(curr_predict_a).unsqueeze(0).unsqueeze(0)
             curr_predict_b = torch.from_numpy(curr_predict_b).unsqueeze(0).unsqueeze(0)
             curr_predict_filter = torch.cat((curr_predict_a, curr_predict_b), dim=1)
-            IA_predict_rgb = batch_lab2rgb_transpose_mc(curr_bs_l[:32], curr_predict_filter[:32, ...], bits=opt.png_bits)
+            IA_predict_rgb = batch_lab2rgb_transpose_mc(
+                curr_bs_l[:32], curr_predict_filter[:32, ...], bits=opt.png_bits
+            )
         else:
-            IA_predict_rgb = batch_lab2rgb_transpose_mc(curr_bs_l[:32], curr_predict[:32, ...], bits=opt.png_bits)
+            IA_predict_rgb = batch_lab2rgb_transpose_mc(
+                curr_bs_l[:32], curr_predict[:32, ...], bits=opt.png_bits
+            )
 
         # save the frames
-        save_frames(image=IA_predict_rgb, image_folder=output_path,  opt=opt, index=index)
+        save_frames(
+            image=IA_predict_rgb, image_folder=output_path, opt=opt, index=index
+        )
 
     # output video
     if opt.make_video:
         video_name = "video.avi"
-        folder2vid(image_folder=output_path, output_dir=output_path, filename=video_name)
+        folder2vid(
+            image_folder=output_path, output_dir=output_path, filename=video_name
+        )
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--frame_propagate", default=False, type=bool, help="propagation mode, , please check the paper"
+        "--frame_propagate",
+        default=False,
+        type=bool,
+        help="propagation mode, , please check the paper",
     )
-    parser.add_argument("--png_bits", type=str, default="uint8", help="uint8, uint16 - png 8/16 bits")
-    
-    parser.add_argument("--image_size", type=str, default=[216 * 2, 384 * 2], help="the image size, eg. [216,384]")
+    parser.add_argument(
+        "--png_bits", type=str, default="uint8", help="uint8, uint16 - png 8/16 bits"
+    )
+
+    parser.add_argument(
+        "--image_size",
+        type=str,
+        default=[216 * 2, 384 * 2],
+        help="the image size, eg. [216,384]",
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        help="cuda or cpu or mps for macbook (could not working)",
+    )
     parser.add_argument("--cuda", action="store_false")
     parser.add_argument("--gpu_ids", type=str, default="0", help="separate by comma")
-    parser.add_argument("--clip_path", type=str, default="./sample_videos/clips/v32", help="path of input clips")
-    parser.add_argument("--ref_path", type=str, default="./sample_videos/ref/v32", help="path of refernce images")
-    parser.add_argument("--output_path", type=str, default="./sample_videos/output", help="path of output clips")
+    parser.add_argument(
+        "--clip_path",
+        type=str,
+        default="./sample_videos/clips/v32",
+        help="path of input clips",
+    )
+    parser.add_argument(
+        "--ref_path",
+        type=str,
+        default="./sample_videos/ref/v32",
+        help="path of refernce images",
+    )
+    parser.add_argument(
+        "--output_path",
+        type=str,
+        default="./sample_videos/output",
+        help="path of output clips",
+    )
     parser.add_argument(
         "--make_video", default=False, type=bool, help="create avi video from frames"
     )
-    parser.add_argument("--quality", default=0.8, type=float, help="quality of compression for jpg")
-    parser.add_argument("--image_format", type=str, default="png", help="output image format: png or jpg")
+    parser.add_argument(
+        "--quality", default=0.8, type=float, help="quality of compression for jpg"
+    )
+    parser.add_argument(
+        "--image_format",
+        type=str,
+        default="png",
+        help="output image format: png or jpg",
+    )
     opt = parser.parse_args()
-    opt.gpu_ids = [int(x) for x in opt.gpu_ids.split(",")]
-    cudnn.benchmark = True
-    print("running on GPU", opt.gpu_ids)
+    device = opt.device
+    if device == "cuda":
+        import torch.backends.cudnn as cudnn
+
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+        torch.cuda.set_device(0)
+        cudnn.benchmark = True
+
+        opt.gpu_ids = [int(x) for x in opt.gpu_ids.split(",")]
+
+        print("running on GPU", opt.gpu_ids)
+    if device in set("cuda", "cpu", "mps"):
+        device = torch.device("cuda")
+    else:
+        device = device_script.get_device()
 
     clip_name = opt.clip_path.split("/")[-1]
     refs = os.listdir(opt.ref_path)
@@ -161,8 +249,12 @@ if __name__ == "__main__":
     for param in vggnet.parameters():
         param.requires_grad = False
 
-    nonlocal_test_path = os.path.join("checkpoints/", "video_moredata_l1/nonlocal_net_iter_76000.pth")
-    color_test_path = os.path.join("checkpoints/", "video_moredata_l1/colornet_iter_76000.pth")
+    nonlocal_test_path = os.path.join(
+        "checkpoints/", "video_moredata_l1/nonlocal_net_iter_76000.pth"
+    )
+    color_test_path = os.path.join(
+        "checkpoints/", "video_moredata_l1/colornet_iter_76000.pth"
+    )
     print("succesfully load nonlocal model: ", nonlocal_test_path)
     print("succesfully load color model: ", color_test_path)
     nonlocal_net.load_state_dict(torch.load(nonlocal_test_path))
@@ -171,9 +263,9 @@ if __name__ == "__main__":
     nonlocal_net.eval()
     colornet.eval()
     vggnet.eval()
-    nonlocal_net.cuda()
-    colornet.cuda()
-    vggnet.cuda()
+    nonlocal_net.to(device)
+    colornet.to(device)
+    vggnet.to(device)
 
     for ref_name in refs:
         try:
@@ -194,4 +286,6 @@ if __name__ == "__main__":
         video_name = "video.avi"
         clip_output_path = os.path.join(opt.output_path, clip_name)
         mkdir_if_not(clip_output_path)
-        folder2vid(image_folder=opt.clip_path, output_dir=clip_output_path, filename=video_name)
+        folder2vid(
+            image_folder=opt.clip_path, output_dir=clip_output_path, filename=video_name
+        )
