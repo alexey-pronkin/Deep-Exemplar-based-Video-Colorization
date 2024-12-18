@@ -12,7 +12,10 @@ from models.vgg19_gray import vgg19_gray, vgg19_gray_new
 def find_local_patch(x, patch_size):
     N, C, H, W = x.shape
     x_unfold = F.unfold(
-        x, kernel_size=(patch_size, patch_size), padding=(patch_size // 2, patch_size // 2), stride=(1, 1)
+        x,
+        kernel_size=(patch_size, patch_size),
+        padding=(patch_size // 2, patch_size // 2),
+        stride=(1, 1),
     )
 
     return x_unfold.view(N, x_unfold.shape[1], H, W)
@@ -56,7 +59,7 @@ class WeightedAverage_color(nn.Module):
         super(WeightedAverage_color, self).__init__()
 
     def forward(self, x_lab, x_lab_predict, patch_size=3, alpha=1, scale_factor=1):
-        """ alpha=0: less smooth; alpha=inf: smoother """
+        """alpha=0: less smooth; alpha=inf: smoother"""
         x_lab = F.interpolate(x_lab, scale_factor=scale_factor)
         l = uncenter_l(x_lab[:, 0:1, :, :])
         a = x_lab[:, 1:2, :, :]
@@ -69,7 +72,9 @@ class WeightedAverage_color(nn.Module):
         local_a_predict = find_local_patch(a_predict, patch_size)
         local_b_predict = find_local_patch(b_predict, patch_size)
 
-        local_color_difference = (local_l - l) ** 2 + (local_a - a) ** 2 + (local_b - b) ** 2
+        local_color_difference = (
+            (local_l - l) ** 2 + (local_a - a) ** 2 + (local_b - b) ** 2
+        )
         correlation = nn.functional.softmax(
             -1 * local_color_difference / alpha, dim=1
         )  # so that sum of weights equal to 1
@@ -112,14 +117,15 @@ class NonlocalWeightedAverage(nn.Module):
 
 
 class CorrelationLayer(nn.Module):
-    def __init__(self, search_range):
+    def __init__(self, search_range, device=torch.device("cpu")):
         super(CorrelationLayer, self).__init__()
+        self.device = device
         self.search_range = search_range
 
     def forward(self, x1, x2, alpha=1, raw_output=False, metric="similarity"):
         shape = list(x1.size())
         shape[1] = (self.search_range * 2 + 1) ** 2
-        cv = torch.zeros(shape).to(torch.device("cuda"))
+        cv = torch.zeros(shape).to(self.device)
 
         for i in range(-self.search_range, self.search_range + 1):
             for j in range(-self.search_range, self.search_range + 1):
@@ -143,7 +149,8 @@ class CorrelationLayer(nn.Module):
                     ).sum(1)
                 else:  # patchwise subtraction
                     cv[:, (self.search_range * 2 + 1) * i + j, slice_h, slice_w] = -(
-                        (x1[:, :, slice_h, slice_w] - x2[:, :, slice_h_r, slice_w_r]) ** 2
+                        (x1[:, :, slice_h, slice_w] - x2[:, :, slice_h_r, slice_w_r])
+                        ** 2
                     ).sum(1)
 
         # TODO sigmoid?
@@ -154,16 +161,22 @@ class CorrelationLayer(nn.Module):
 
 
 class Self_Attn(nn.Module):
-    """ Self attention Layer"""
+    """Self attention Layer"""
 
     def __init__(self, in_dim, activation):
         super(Self_Attn, self).__init__()
         self.chanel_in = in_dim
         self.activation = activation
 
-        self.query_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim // 4, kernel_size=1)
-        self.key_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim // 4, kernel_size=1)
-        self.value_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim, kernel_size=1)
+        self.query_conv = nn.Conv2d(
+            in_channels=in_dim, out_channels=in_dim // 4, kernel_size=1
+        )
+        self.key_conv = nn.Conv2d(
+            in_channels=in_dim, out_channels=in_dim // 4, kernel_size=1
+        )
+        self.value_conv = nn.Conv2d(
+            in_channels=in_dim, out_channels=in_dim, kernel_size=1
+        )
         self.gamma = nn.Parameter(torch.zeros(1))
         self.softmax = nn.Softmax(dim=-1)
 
@@ -176,11 +189,15 @@ class Self_Attn(nn.Module):
             attention: B X N X N (N is Width*Height)
         """
         m_batchsize, C, width, height = x.size()
-        proj_query = self.query_conv(x).view(m_batchsize, -1, width * height).permute(0, 2, 1)  # B X N X C
+        proj_query = (
+            self.query_conv(x).view(m_batchsize, -1, width * height).permute(0, 2, 1)
+        )  # B X N X C
         proj_key = self.key_conv(x).view(m_batchsize, -1, width * height)  # B X C x N
         energy = torch.bmm(proj_query, proj_key)  # transpose check
         attention = self.softmax(energy)  # B X (N) X (N)
-        proj_value = self.value_conv(x).view(m_batchsize, -1, width * height)  # B X C X N
+        proj_value = self.value_conv(x).view(
+            m_batchsize, -1, width * height
+        )  # B X C X N
 
         out = torch.bmm(proj_value, attention.permute(0, 1, 2))
         out = out.view(m_batchsize, C, width, height)
@@ -260,7 +277,13 @@ class VGG19_feature_color(nn.Module):
     def __init__(self):
         super(VGG19_feature_color, self).__init__()
         # self.select = ['0', '5', '10', '19', '28']  # Select conv1_1 ~ conv5_1 activation maps.
-        self.select = ["1", "6", "11", "20", "29"]  # Select relu1_1 ~ relu5_1 activation maps.
+        self.select = [
+            "1",
+            "6",
+            "11",
+            "20",
+            "29",
+        ]  # Select relu1_1 ~ relu5_1 activation maps.
         self.vgg = torch_models.vgg19(pretrained=True).features
 
     def forward(self, x):
@@ -275,9 +298,10 @@ class VGG19_feature_color(nn.Module):
 
 class VGG19_feature(nn.Module):
     # input: [LLL] channels, range=[0,255]
-    def __init__(self, gpu_ids):
+    def __init__(self, gpu_ids, device=torch.device("cpu")):
         super(VGG19_feature, self).__init__()
-        self.vgg19_gray = vgg19_gray().cuda()
+        self.device = device
+        self.vgg19_gray = vgg19_gray().to(self.device)
 
     def forward(self, A_l, B_l):
         A_relu3_1, A_relu4_1, A_relu5_1 = self.vgg19_gray(A_l)
@@ -331,11 +355,15 @@ class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, padding=1, stride=1):
         super(ResidualBlock, self).__init__()
         self.padding1 = nn.ReflectionPad2d(padding)
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=0, stride=stride)
+        self.conv1 = nn.Conv2d(
+            in_channels, out_channels, kernel_size=kernel_size, padding=0, stride=stride
+        )
         self.bn1 = nn.InstanceNorm2d(out_channels)
         self.prelu = nn.PReLU()
         self.padding2 = nn.ReflectionPad2d(padding)
-        self.conv2 = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=0, stride=stride)
+        self.conv2 = nn.Conv2d(
+            in_channels, out_channels, kernel_size=kernel_size, padding=0, stride=stride
+        )
         self.bn2 = nn.InstanceNorm2d(out_channels)
 
     def forward(self, x):
@@ -353,7 +381,7 @@ class ResidualBlock(nn.Module):
 
 
 class WarpNet(nn.Module):
-    """ input is Al, Bl, channel = 1, range~[0,255] """
+    """input is Al, Bl, channel = 1, range~[0,255]"""
 
     def __init__(self, batch_size):
         super(WarpNet, self).__init__()
@@ -410,16 +438,42 @@ class WarpNet(nn.Module):
         )
 
         self.layer = nn.Sequential(
-            ResidualBlock(self.feature_channel * 4, self.feature_channel * 4, kernel_size=3, padding=1, stride=1),
-            ResidualBlock(self.feature_channel * 4, self.feature_channel * 4, kernel_size=3, padding=1, stride=1),
-            ResidualBlock(self.feature_channel * 4, self.feature_channel * 4, kernel_size=3, padding=1, stride=1),
+            ResidualBlock(
+                self.feature_channel * 4,
+                self.feature_channel * 4,
+                kernel_size=3,
+                padding=1,
+                stride=1,
+            ),
+            ResidualBlock(
+                self.feature_channel * 4,
+                self.feature_channel * 4,
+                kernel_size=3,
+                padding=1,
+                stride=1,
+            ),
+            ResidualBlock(
+                self.feature_channel * 4,
+                self.feature_channel * 4,
+                kernel_size=3,
+                padding=1,
+                stride=1,
+            ),
         )
 
         self.theta = nn.Conv2d(
-            in_channels=self.in_channels, out_channels=self.inter_channels, kernel_size=1, stride=1, padding=0
+            in_channels=self.in_channels,
+            out_channels=self.inter_channels,
+            kernel_size=1,
+            stride=1,
+            padding=0,
         )
         self.phi = nn.Conv2d(
-            in_channels=self.in_channels, out_channels=self.inter_channels, kernel_size=1, stride=1, padding=0
+            in_channels=self.in_channels,
+            out_channels=self.inter_channels,
+            kernel_size=1,
+            stride=1,
+            padding=0,
         )
 
         self.upsampling = nn.Upsample(scale_factor=4)
@@ -458,29 +512,44 @@ class WarpNet(nn.Module):
         B_feature5_1 = self.layer5_1(B_relu5_1)
 
         # concatenate features
-        if A_feature5_1.shape[2] != A_feature2_1.shape[2] or A_feature5_1.shape[3] != A_feature2_1.shape[3]:
+        if (
+            A_feature5_1.shape[2] != A_feature2_1.shape[2]
+            or A_feature5_1.shape[3] != A_feature2_1.shape[3]
+        ):
             A_feature5_1 = F.pad(A_feature5_1, (0, 0, 1, 1), "replicate")
             B_feature5_1 = F.pad(B_feature5_1, (0, 0, 1, 1), "replicate")
-        A_features = self.layer(torch.cat((A_feature2_1, A_feature3_1, A_feature4_1, A_feature5_1), 1))
-        B_features = self.layer(torch.cat((B_feature2_1, B_feature3_1, B_feature4_1, B_feature5_1), 1))
+        A_features = self.layer(
+            torch.cat((A_feature2_1, A_feature3_1, A_feature4_1, A_feature5_1), 1)
+        )
+        B_features = self.layer(
+            torch.cat((B_feature2_1, B_feature3_1, B_feature4_1, B_feature5_1), 1)
+        )
 
         # pairwise cosine similarity
-        theta = self.theta(A_features).view(batch_size, self.inter_channels, -1)  # 2*256*(feature_height*feature_width)
+        theta = self.theta(A_features).view(
+            batch_size, self.inter_channels, -1
+        )  # 2*256*(feature_height*feature_width)
         theta = theta - theta.mean(dim=-1, keepdim=True)  # center the feature
         theta_norm = torch.norm(theta, 2, 1, keepdim=True) + sys.float_info.epsilon
         theta = torch.div(theta, theta_norm)
         theta_permute = theta.permute(0, 2, 1)  # 2*(feature_height*feature_width)*256
-        phi = self.phi(B_features).view(batch_size, self.inter_channels, -1)  # 2*256*(feature_height*feature_width)
+        phi = self.phi(B_features).view(
+            batch_size, self.inter_channels, -1
+        )  # 2*256*(feature_height*feature_width)
         phi = phi - phi.mean(dim=-1, keepdim=True)  # center the feature
         phi_norm = torch.norm(phi, 2, 1, keepdim=True) + sys.float_info.epsilon
         phi = torch.div(phi, phi_norm)
-        f = torch.matmul(theta_permute, phi)  # 2*(feature_height*feature_width)*(feature_height*feature_width)
+        f = torch.matmul(
+            theta_permute, phi
+        )  # 2*(feature_height*feature_width)*(feature_height*feature_width)
         if detach_flag:
             f = f.detach()
 
         f_similarity = f.unsqueeze_(dim=1)
         similarity_map = torch.max(f_similarity, -1, keepdim=True)[0]
-        similarity_map = similarity_map.view(batch_size, 1, feature_height, feature_width)
+        similarity_map = similarity_map.view(
+            batch_size, 1, feature_height, feature_width
+        )
 
         # f can be negative
         f_WTA = f if WTA_scale_weight == 1 else WTA_scale.apply(f, WTA_scale_weight)

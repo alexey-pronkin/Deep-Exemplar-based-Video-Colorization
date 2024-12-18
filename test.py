@@ -245,7 +245,7 @@ if __name__ == "__main__":
     nonlocal_net = WarpNet(1)
     colornet = ColorVidNet(7)
     vggnet = VGG19_pytorch()
-    vggnet.load_state_dict(torch.load("data/vgg19_conv.pth"))
+    vggnet.load_state_dict(torch.load("data/vgg19_conv.pth", map_location=device))
     for param in vggnet.parameters():
         param.requires_grad = False
 
