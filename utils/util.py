@@ -73,7 +73,9 @@ def center_ab(ab):
 def center_lab_img(img_lab):
     return (
         img_lab / np.array((l_norm, ab_norm, ab_norm))[:, np.newaxis, np.newaxis]
-        - np.array((l_mean / l_norm, ab_mean / ab_norm, ab_mean / ab_norm))[:, np.newaxis, np.newaxis]
+        - np.array((l_mean / l_norm, ab_mean / ab_norm, ab_mean / ab_norm))[
+            :, np.newaxis, np.newaxis
+        ]
     )
 
 
@@ -81,10 +83,9 @@ def center_lab_img(img_lab):
 def rgb2lab_transpose(img_rgb):
     return color.rgb2lab(img_rgb).transpose((2, 0, 1))
 
-b2n = {
-    "uint16": 2**16-1,
-    "uint8": 2**8-1
-    }
+
+b2n = {"uint16": 2**16 - 1, "uint8": 2**8 - 1}
+
 
 def lab2rgb(img_l, img_ab):
     """INPUTS
@@ -132,9 +133,10 @@ def lab2rgb_transpose_mc(img_l_mc, img_ab_mc, bits="uint16"):
     img_l = img_l_mc * l_norm + l_mean
     img_ab = img_ab_mc * ab_norm + ab_mean
     pred_lab = torch.cat((img_l, img_ab), dim=0)
-    grid_lab = pred_lab.numpy().astype("float128")
-    return (np.clip(color.lab2rgb(grid_lab.transpose((1, 2, 0))), 0, 1) * b2n.get(bits)).astype(bits)
-
+    grid_lab = pred_lab.numpy()
+    return (
+        np.clip(color.lab2rgb(grid_lab.transpose((1, 2, 0))), 0, 1) * b2n.get(bits)
+    ).astype(bits)
 
 
 def batch_lab2rgb_transpose_mc(img_l_mc, img_ab_mc, nrow=8, bits="uint16"):
@@ -153,13 +155,17 @@ def batch_lab2rgb_transpose_mc(img_l_mc, img_ab_mc, nrow=8, bits="uint16"):
     img_l = img_l_mc * l_norm + l_mean
     img_ab = img_ab_mc * ab_norm + ab_mean
     pred_lab = torch.cat((img_l, img_ab), dim=1)
-    grid_lab = vutils.make_grid(pred_lab, nrow=nrow).numpy().astype("float128")
-    return (np.clip(color.lab2rgb(grid_lab.transpose((1, 2, 0))), 0, 1) * b2n.get(bits)).astype(bits)
+    grid_lab = vutils.make_grid(pred_lab, nrow=nrow).numpy()
+    return (
+        np.clip(color.lab2rgb(grid_lab.transpose((1, 2, 0))), 0, 1) * b2n.get(bits)
+    ).astype(bits)
 
 
 ###### loss functions ######
 def feature_normalize(feature_in):
-    feature_in_norm = torch.norm(feature_in, 2, 1, keepdim=True) + sys.float_info.epsilon
+    feature_in_norm = (
+        torch.norm(feature_in, 2, 1, keepdim=True) + sys.float_info.epsilon
+    )
     feature_in_norm = torch.div(feature_in, feature_in_norm)
     return feature_in_norm
 
@@ -203,7 +209,10 @@ def calc_ab_gradient(input_ab):
 def calc_tv_loss(input):
     x_grad = input[:, :, :, 1:] - input[:, :, :, :-1]
     y_grad = input[:, :, 1:, :] - input[:, :, :-1, :]
-    return torch.sum(x_grad ** 2) / x_grad.nelement() + torch.sum(y_grad ** 2) / y_grad.nelement()
+    return (
+        torch.sum(x_grad**2) / x_grad.nelement()
+        + torch.sum(y_grad**2) / y_grad.nelement()
+    )
 
 
 def calc_cosine_dist_loss(input, target):
@@ -245,7 +254,9 @@ def colorfulness(input_ab):
     mean_a = torch.mean(a, dim=-1)
     mean_b = torch.mean(b, dim=-1)
 
-    return torch.sqrt(sigma_a ** 2 + sigma_b ** 2) + 0.37 * torch.sqrt(mean_a ** 2 + mean_b ** 2)
+    return torch.sqrt(sigma_a**2 + sigma_b**2) + 0.37 * torch.sqrt(
+        mean_a**2 + mean_b**2
+    )
 
 
 ###### video related #######
@@ -257,19 +268,32 @@ def save_frames(image, image_folder, opt, index=None, image_name=None, bits="uin
             cv2.imwrite(os.path.join(image_folder, image_name), image)
         else:
             if any([flag in opt.image_format for flag in ["jpeg", "jpg"]]):
-                cv2.imwrite(os.path.join(image_folder, str(index).zfill(5) + ".jpg"), image, [cv2.IMWRITE_JPEG_QUALITY, int(opt.quality*100)])
+                cv2.imwrite(
+                    os.path.join(image_folder, str(index).zfill(5) + ".jpg"),
+                    image,
+                    [cv2.IMWRITE_JPEG_QUALITY, int(opt.quality * 100)],
+                )
             elif "png" in opt.image_format.lower():
-                cv2.imwrite(os.path.join(image_folder, str(index).zfill(5) + ".png"), image)
+                cv2.imwrite(
+                    os.path.join(image_folder, str(index).zfill(5) + ".png"), image
+                )
 
 
 def folder2vid(image_folder, output_dir, filename):
-    images = [img for img in os.listdir(image_folder) if img.endswith(".jpg") or img.endswith(".png")]
+    images = [
+        img
+        for img in os.listdir(image_folder)
+        if img.endswith(".jpg") or img.endswith(".png")
+    ]
     images.sort()
     frame = cv2.imread(os.path.join(image_folder, images[0]))
     height, width, layers = frame.shape
     print("writing to video " + os.path.join(output_dir, filename))
     video = cv2.VideoWriter(
-        os.path.join(output_dir, filename), cv2.VideoWriter_fourcc("D", "I", "V", "X"), 24, (width, height)
+        os.path.join(output_dir, filename),
+        cv2.VideoWriter_fourcc("D", "I", "V", "X"),
+        24,
+        (width, height),
     )
 
     for image in images:
@@ -314,7 +338,12 @@ def parse(parser, save=True):
     if save:
         file_name = os.path.join("opt.txt")
         with open(file_name, "wt") as opt_file:
-            opt_file.write(os.path.basename(sys.argv[0]) + " " + strftime("%Y-%m-%d %H:%M:%S", gmtime()) + "\n")
+            opt_file.write(
+                os.path.basename(sys.argv[0])
+                + " "
+                + strftime("%Y-%m-%d %H:%M:%S", gmtime())
+                + "\n"
+            )
             opt_file.write("------------ Options -------------\n")
             for k, v in sorted(args.items()):
                 opt_file.write("%s: %s\n" % (str(k), str(v)))
@@ -350,15 +379,25 @@ def imshow(input_image, title=None, type_conversion=False):
 
 
 def imshow_lab(input_lab):
-    plt.imshow((batch_lab2rgb_transpose_mc(input_lab[:32, 0:1, :, :], input_lab[:32, 1:3, :, :])).astype(np.uint8))
+    plt.imshow(
+        (
+            batch_lab2rgb_transpose_mc(
+                input_lab[:32, 0:1, :, :], input_lab[:32, 1:3, :, :]
+            )
+        ).astype(np.uint8)
+    )
 
 
 ###### vgg preprocessing ######
 def vgg_preprocess(tensor):
     # input is RGB tensor which ranges in [0,1]
     # output is BGR tensor which ranges in [0,255]
-    tensor_bgr = torch.cat((tensor[:, 2:3, :, :], tensor[:, 1:2, :, :], tensor[:, 0:1, :, :]), dim=1)
-    tensor_bgr_ml = tensor_bgr - torch.Tensor([0.40760392, 0.45795686, 0.48501961]).type_as(tensor_bgr).view(1, 3, 1, 1)
+    tensor_bgr = torch.cat(
+        (tensor[:, 2:3, :, :], tensor[:, 1:2, :, :], tensor[:, 0:1, :, :]), dim=1
+    )
+    tensor_bgr_ml = tensor_bgr - torch.Tensor(
+        [0.40760392, 0.45795686, 0.48501961]
+    ).type_as(tensor_bgr).view(1, 3, 1, 1)
     return tensor_bgr_ml * 255
 
 
@@ -367,8 +406,12 @@ def torch_vgg_preprocess(tensor):
     # note that both input and output are RGB tensors;
     # input and output ranges in [0,1]
     # normalize the tensor with mean and variance
-    tensor_mc = tensor - torch.Tensor([0.485, 0.456, 0.406]).type_as(tensor).view(1, 3, 1, 1)
-    return tensor_mc / torch.Tensor([0.229, 0.224, 0.225]).type_as(tensor_mc).view(1, 3, 1, 1)
+    tensor_mc = tensor - torch.Tensor([0.485, 0.456, 0.406]).type_as(tensor).view(
+        1, 3, 1, 1
+    )
+    return tensor_mc / torch.Tensor([0.229, 0.224, 0.225]).type_as(tensor_mc).view(
+        1, 3, 1, 1
+    )
 
 
 def network_gradient(net, gradient_on=True):
@@ -379,10 +422,18 @@ def network_gradient(net, gradient_on=True):
 
 ##### color space
 xyz_from_rgb = np.array(
-    [[0.412453, 0.357580, 0.180423], [0.212671, 0.715160, 0.072169], [0.019334, 0.119193, 0.950227]]
+    [
+        [0.412453, 0.357580, 0.180423],
+        [0.212671, 0.715160, 0.072169],
+        [0.019334, 0.119193, 0.950227],
+    ]
 )
 rgb_from_xyz = np.array(
-    [[3.24048134, -0.96925495, 0.05564664], [-1.53715152, 1.87599, -0.20404134], [-0.49853633, 0.04155593, 1.05731107]]
+    [
+        [3.24048134, -0.96925495, 0.05564664],
+        [-1.53715152, 1.87599, -0.20404134],
+        [-0.49853633, 0.04155593, 1.05731107],
+    ]
 )
 
 
@@ -391,7 +442,11 @@ def tensor_lab2rgb(input):
     n * 3* h *w
     """
     input_trans = input.transpose(1, 2).transpose(2, 3)  # n * h * w * 3
-    L, a, b = input_trans[:, :, :, 0:1], input_trans[:, :, :, 1:2], input_trans[:, :, :, 2:]
+    L, a, b = (
+        input_trans[:, :, :, 0:1],
+        input_trans[:, :, :, 1:2],
+        input_trans[:, :, :, 2:],
+    )
     y = (L + 16.0) / 116.0
     x = (a / 500.0) + y
     z = y - (b / 200.0)
@@ -407,9 +462,9 @@ def tensor_lab2rgb(input):
     mask_xyz[:, :, :, 0] = mask_xyz[:, :, :, 0] * 0.95047
     mask_xyz[:, :, :, 2] = mask_xyz[:, :, :, 2] * 1.08883
 
-    rgb_trans = torch.mm(mask_xyz.view(-1, 3), torch.from_numpy(rgb_from_xyz).type_as(xyz)).view(
-        input.size(0), input.size(2), input.size(3), 3
-    )
+    rgb_trans = torch.mm(
+        mask_xyz.view(-1, 3), torch.from_numpy(rgb_from_xyz).type_as(xyz)
+    ).view(input.size(0), input.size(2), input.size(3), 3)
     rgb = rgb_trans.transpose(2, 3).transpose(1, 2)
 
     mask = rgb > 0.0031308
