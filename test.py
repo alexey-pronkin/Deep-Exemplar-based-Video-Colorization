@@ -234,7 +234,7 @@ if __name__ == "__main__":
 
         print("running on GPU", opt.gpu_ids)
     if device in ["cuda", "cpu", "mps"]:
-        device = torch.device("cuda")
+        device = torch.device(device)
     else:
         device = device_script.get_device()
 
