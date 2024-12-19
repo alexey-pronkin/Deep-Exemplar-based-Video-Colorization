@@ -257,8 +257,8 @@ if __name__ == "__main__":
     )
     print("succesfully load nonlocal model: ", nonlocal_test_path)
     print("succesfully load color model: ", color_test_path)
-    nonlocal_net.load_state_dict(torch.load(nonlocal_test_path))
-    colornet.load_state_dict(torch.load(color_test_path))
+    nonlocal_net.load_state_dict(torch.load(nonlocal_test_path, map_location=device))
+    colornet.load_state_dict(torch.load(color_test_path, map_location=device))
 
     nonlocal_net.eval()
     colornet.eval()
